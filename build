@@ -1,0 +1,17 @@
+#!/bin/bash
+
+shopt -o posix
+set -ex
+
+
+CC=clang
+
+
+uild() {
+# SDL ?
+
+}
+
+clean() {
+
+}
