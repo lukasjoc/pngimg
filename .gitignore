@@ -5,3 +5,5 @@
 tags
 main
 out
+*.orig
+backup*
