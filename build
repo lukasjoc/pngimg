@@ -1,17 +1,7 @@
 #!/bin/bash
 
-shopt -o posix
 set -ex
-
 
 CC=clang
 
-
-uild() {
-# SDL ?
-
-}
-
-clean() {
-
-}
+"$CC" -Wpadded -std=c99 -Werror -Wextra -o main main.c
