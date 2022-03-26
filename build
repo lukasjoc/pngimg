@@ -4,4 +4,4 @@ set -ex
 
 CC=clang
 
-"$CC" -Wpadded -std=c99 -Werror -Wextra -o main main.c
+"$CC" -Wall -Wpadded -std=c99 -Werror -Wextra -Wundef -o main main.c
