@@ -17,7 +17,8 @@
 #define bytes_to_uint32_t(bytes) ((uint32_t)bytes[0] << 24) + ((uint32_t)bytes[1] << 16)  \
     + ((uint32_t)bytes[2] << 8) + (uint32_t)bytes[3]
 
-uint32_t *read_n_bytes(FILE *file, uint32_t *bytes, size_t n, uint32_t offset) {
+// puts n bytes from file by offset into bytes
+void read_n_bytes(FILE *file, uint32_t *bytes, size_t n, uint32_t offset) {
     uint32_t l = 0;
     fseek(file, offset, SEEK_SET);
     char buffer;
@@ -25,7 +26,6 @@ uint32_t *read_n_bytes(FILE *file, uint32_t *bytes, size_t n, uint32_t offset) {
         printf("Bytes in order: byte= %u \n", (uint8_t)buffer);
         bytes[l++] = (uint8_t)buffer;
     }
-    return bytes;
 }
 
 typedef struct Chunk {
@@ -54,70 +54,80 @@ bool check_png_signature(FILE* file, const char *png_file_path ) {
     return true;
 }
 
-uint32_t *read_length(FILE* file, Chunk *chunk, uint32_t *offset) {
-    puts("Parsing length");
-    uint32_t *l = read_n_bytes(file, chunk->length, BYTE_BOUNDARY, *offset);
-    *offset += BYTE_BOUNDARY;
-    return chunk->length;
-}
+//uint32_t *read_length(FILE* file, uint32_t *offset) {
+//    uint32_t length[BYTE_BOUNDARY] = {0};
+//    puts("Parsing length");
+//    uint32_t *l = read_n_bytes(file, length, BYTE_BOUNDARY, *offset);
+//
+//    *offset += BYTE_BOUNDARY;
+//
+//}
 
-uint32_t *read_type(FILE* file, Chunk *chunk, uint32_t *offset) {
-    puts("Parsing type");
-    uint32_t *l = read_n_bytes(file, chunk->type, BYTE_BOUNDARY, *offset);
-    *offset += BYTE_BOUNDARY;
-    return chunk->type;
-}
-
-uint32_t *read_data(FILE* file, Chunk *chunk, uint32_t *offset) {
-    if(!*chunk->length) return NULL;
-    uint32_t length = bytes_to_uint32_t(chunk->length);
-    uint32_t chunk->data = (uint32_t)calloc(length, sizeof(uint32_t));
-    if(chunk->data == NULL) {
-        fprintf(stderr,
-                "ERROR: could not allocate enough memory for chunk data: length=%u\n",
-                length);
-    }
-
-    printf("Parsing data: length=%u\n", length);
-    uint32_t *l = read_n_bytes(file, chunk->data, length, *offset);
-    *offset += length;
-    return chunk->data;
-}
-
-uint32_t *read_crc(FILE* file, Chunk *chunk, uint32_t *offset) {
-    puts("Parsing crc");
-    uint32_t *l = read_n_bytes(file, chunk->crc, BYTE_BOUNDARY, *offset);
-    *offset += BYTE_BOUNDARY;
-    return chunk->crc;
-}
-
+//uint32_t *read_type(FILE* file, uint32_t *offset) {
+//    uint32_t type[BYTE_BOUNDARY] = {0};
+//    puts("Parsing type");
+//    uint32_t *l = read_n_bytes(file, type, BYTE_BOUNDARY, *offset);
+//    *offset += BYTE_BOUNDARY;
+//    return l;
+//}
+//
+//uint32_t *read_data(FILE* file, uint32_t *offset, uint32_t length) {
+//    uint32_t *data = calloc(length, sizeof(uint32_t));
+//    printf("Parsing data: length=%u\n", length);
+//    uint32_t *l = read_n_bytes(file, data, length, *offset);
+//    *offset += length;
+//
+//    return l;
+//
+//}
+//
+//uint32_t *read_crc(FILE* file, uint32_t *offset) {
+//    uint32_t crc[BYTE_BOUNDARY] = {0};
+//    puts("Parsing crc");
+//    uint32_t *l = read_n_bytes(file, crc, BYTE_BOUNDARY, offset);
+//    *offset += BYTE_BOUNDARY;
+//    return l;
+//}
 
 // read all chunks
 void read_chunks(FILE *file) {
     uint32_t offset = PNG_SIGNATURE_LENGTH;
     char buffer;
-    Chunk chunk = {
-        //.length = {0},
-        //.type = {0},
-        //.data = NULL,
-        //.crc = {0},
-    };
+
     while((buffer = fgetc(file) != EOF)) {
-        uint32_t *length = read_length(file, &chunk, &offset);
-        for(uint32_t i = 0 ; i < 4; i++) printf("length at %d %d: \n", i, (uint32_t)length[i]);
-        if(length) {
-            uint32_t *type = read_type(file, &chunk &offset);
-            if(type) {
-                uint32_t *data = read_data(file, &chunk, &offset);
-                if(data) {
-                    uint32_t *crc = read_crc(file, &chunk, &offset);
-                    if(crc) {
-                        free(chunk->data);
-                        chunk = NULL;
-                    }
-                }
-            }
-        }
+        // Parse the length
+        uint32_t length[BYTE_BOUNDARY] = {0};
+        puts("Length START");
+        read_n_bytes(file, length, BYTE_BOUNDARY, offset);
+        offset += BYTE_BOUNDARY;
+        puts("Length END");
+        // if(*length==NULL) break;
+
+        // Parse the type
+        puts("Type START");
+        uint32_t type[BYTE_BOUNDARY] = {0};
+        read_n_bytes(file, type, BYTE_BOUNDARY, offset);
+        offset += BYTE_BOUNDARY;
+        puts("Type END");
+        // if(*type==NULL) break;
+
+        // #if 1 for(unsigned int i = 0; i < 4; ++i) printf("length bytes == %d==%d \n", i, length[i]); #endif
+
+        puts("Data START");
+        uint32_t length_into = bytes_to_uint32_t(length);
+        printf("Data length uint32_t=%u\n", length_into);
+        uint32_t *data = (uint32_t* )calloc(length_into, sizeof(uint32_t));
+        read_n_bytes(file, data, length_into, offset);
+        offset += length_into;
+        puts("Data END");
+
+        // Parse the crc
+        puts("Crc START");
+        uint32_t crc[BYTE_BOUNDARY] = {0};
+        read_n_bytes(file, crc, BYTE_BOUNDARY, offset);
+        offset += BYTE_BOUNDARY;
+        puts("Crc END");
+        // if(*crc==NULL) break;
     }
 }
 
@@ -150,7 +160,7 @@ int main(int argc, char **argv) {
             puts("PNG File Signature valid");
 
             // TODO: read chunk data, length of chunk data
-            read_chunks(file); //,png_file_path);
+            read_chunks(file);
         } else {
             // return to the user and exit
             puts("PNG doesn't have a valid signature");
