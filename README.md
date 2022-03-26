@@ -1,2 +1,4 @@
 # pngimg
-> png/image format viewer / parser
+
+> PNG Decoder
+

@@ -12,7 +12,6 @@ Png Decoder:
     - Parsing transparency/color information
     - Parsing textual information
 
-
 -----
 Critical chunks (must appear in this order, except PLTE is optional):
    
@@ -22,8 +21,7 @@ Name  Multiple  Ordering constraints
 IHDR    No      Must be first
 PLTE    No      Before IDAT
 IDAT    Yes     Multiple IDATs must be consecutive
-IEND    No      Must be last
-   
+IEND    No      Must :q
 Ancillary chunks (need not appear in this order):
    
 Name  Multiple  Ordering constraints
@@ -57,3 +55,4 @@ Warning          Warning of nature of content
 Source           Device used to create the image
 Comment          Miscellaneous comment; conversion from
                  GIF comment
+

@@ -6,3 +6,5 @@ tags
 main
 *.orig
 backup*
+out
+
