@@ -11,11 +11,13 @@
 #include <string.h>
 
 // Converts a byte array an unsigned 32 bit int
-#define into_u32(bytes) (bytes[0] << 24) + (bytes[1] << 16) + (bytes[2] << 8) + bytes[3]
+#define into_u32(bytes) (uint32_t)((bytes[0] << 24) + (bytes[1] << 16) \
+            + (bytes[2] << 8) + bytes[3])
 
 #define PNG_SIGNATURE_LENGTH 8
 #define BYTE_BOUNDARY 4
 #define PNG_LENGTH_MAX 32
+#define PNG_DATA_CHUNK_SIZE PNG_LENGTH_MAX * 1024
 
 // A pre-defined byte-array that defines the signature
 const uint8_t PNG_SIGNATURE[PNG_SIGNATURE_LENGTH] = {
@@ -45,23 +47,34 @@ const uint32_t CHUNK_sBIT = 0x73424954; // TODO: support type
 const uint32_t CHUNK_tEXt = 0x74455874; // TODO: support type
 const uint32_t CHUNK_iCCP = 0x69434350; // TODO: support type
 
+typedef struct PngFile {
+    // Count of chunks
+    uint32_t chunk_count;
+
+    // path of file
+    const char *path;
+
+    // the open file
+    FILE *file;
+} PngFile;
+
 // A single chunk of any type
 typedef struct Chunk {
     // TODO: go deeper into the individual chunk data
     // of each chunk
     // the data of the chunk (lazyly as a static array -)
-    uint8_t data[PNG_LENGTH_MAX * 1024];
+    uint8_t data[PNG_DATA_CHUNK_SIZE];
 
     // the number of bytes for the data
     uint8_t length[BYTE_BOUNDARY];
 
     // the type name of the chunk
     uint8_t type[BYTE_BOUNDARY];
+    uint32_t type_int;
 
     // the redundancy check
     uint8_t crc[BYTE_BOUNDARY];
 }Chunk;
-
 
 // TODO: handle multiple chunk constraint
 //#define CONSTRAINT_NO_MULT_LENGTH = 2
@@ -110,47 +123,47 @@ bool check_png_signature(FILE *file, const char *png_file_path ) {
         uint8_t current_signature = PNG_SIGNATURE[signature_length];
         printf("Parsing Signature: path=%s, signature_length=%u, buffer=%u, png_buffer=%u\n",
                 png_file_path, signature_length, (uint8_t)buffer, current_signature);
-        if((uint8_t)buffer!=current_signature) return false;
+        //assert((uint8_t)buffer!=current_signature
+        //         && "PNG Signature not valid on byte: %u", (uint8_t)buffer);
         signature_length++;
     }
     return true;
 }
 
 // read all chunks
-void read_chunks(FILE *file, Chunk *chunks, size_t chunk_size) {
-    uint32_t chunk_count = 0;
+void read_chunks(PngFile *file, Chunk *chunks, size_t chunk_size) {
     off_t offset = PNG_SIGNATURE_LENGTH;
-    while(fgetc(file) != EOF || chunk_count > chunk_size) {
+    while(fgetc(file->file) != EOF || file->chunk_count > chunk_size) {
         Chunk chunk = {0};
 
         // Parse the length
         puts("Length START");
-        offset = read_n_bytes(file, chunk.length, BYTE_BOUNDARY, offset);
+        offset = read_n_bytes(file->file, chunk.length, BYTE_BOUNDARY, offset);
         puts("Length END");
 
         // Parse the type
         puts("Type START");
-        offset = read_n_bytes(file, chunk.type, BYTE_BOUNDARY, offset);
-        printf("Type END= %s, 0x%X\n", (char*)chunk.type, into_u32(chunk.type));
+        offset = read_n_bytes(file->file, chunk.type, BYTE_BOUNDARY, offset);
+        chunk.type_int = into_u32(chunk.type);
+        printf("Type END= %.*s, 0x%X\n", 4, (char*)chunk.type, into_u32(chunk.type));
 
         // Try to parse the data
         puts("Data START");
         uint32_t length_into = into_u32(chunk.length);
-        offset = read_n_bytes(file, chunk.data, length_into, offset);
+        offset = read_n_bytes(file->file, chunk.data, length_into, offset);
         puts("Data END");
 
         // Parse the CRC
         puts("CRC START");
-        offset = read_n_bytes(file, chunk.crc, BYTE_BOUNDARY, offset);
-        assert(chunk_count < chunk_size
+        offset = read_n_bytes(file->file, chunk.crc, BYTE_BOUNDARY, offset);
+        assert(file->chunk_count < chunk_size
                 && "More Chunks possible, but not enough memory provided to save them");
-        chunks[chunk_count++] = chunk;
+        chunks[file->chunk_count++] = chunk;
         puts("CRC END");
 
-        uint32_t type_as_u32 = into_u32(chunk.type);
         // check if the first chunk is the IHDR chunk
         // if not exit fatally
-        if((chunk_count == 1) && (type_as_u32 != CHUNK_IHDR)) {
+        if((file->chunk_count == 1) && (chunk.type_int != CHUNK_IHDR)) {
             fprintf(stderr,
                     "ERROR: Invalid Chunk Order. IHDR needs to the first chunk: found = %s\n",
                     chunk.type);
@@ -159,9 +172,9 @@ void read_chunks(FILE *file, Chunk *chunks, size_t chunk_size) {
 
         // check if the current chunk is the IEND chunk
         // if then exit and finish
-        if(type_as_u32 == CHUNK_IEND) {
+        if(chunk.type_int == CHUNK_IEND) {
             puts("IEND chunk reached official PNG data has been parsed");
-            printf("Chunks parsed: count=%d \n", chunk_count);
+            printf("Chunks parsed: count=%d \n", file->chunk_count);
             break;
         }
     }
@@ -200,9 +213,13 @@ int main(int argc, char **argv) {
             // hand the png image stream to the parser, that parses
             // all the chunks
             puts("PNG File Signature valid");
+            PngFile png_file = {
+                .file = file,
+                .path = png_file_path,
+            };
+
             Chunk chunks[128] = {0};
-            read_chunks(file, chunks, 128);
-            // print_chunks(chunks, 100);
+            read_chunks(&png_file, chunks, 128);
         } else {
             // return to the user and exit
             puts("PNG doesn't have a valid signature");

@@ -2,7 +2,11 @@
 
 set -ex
 
-CC=clang
-
-"$CC" -Wall -Wpadded -std=c99 -Werror -Wextra -Wundef -o main main.c
+if [ "$1" == 'clean' ]; then
+    rm -rf main *.orig out;
+else
+    CC=clang
+    CFLAGS="-Wall -std=c99 -Wextra -Wundef" # -Wpadded"
+    "$CC" $CFLAGS -o main main.c
+fi
 
