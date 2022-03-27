@@ -1,16 +1,22 @@
-Png Decoder:
+PNG Decoder:
 ----
 
-- Parsing all chunks
+DONE - Parsing all chunks
 - Identifing critical chunks
     - IHDR (Image Header)
     - PLTE (Color Palette)
     - IDAT (Image Data)
     - IEND (Image Trailer)
 
+- Check CRC for each chunk while parsing
+- Parse CRC before parsing the data
+
+- Verify Critical chunks by constraints
+
 - Parsing ancillary chunks
     - Parsing transparency/color information
     - Parsing textual information
+- Verify ancillary cunks by constraints
 
 -----
 Critical chunks (must appear in this order, except PLTE is optional):
@@ -21,7 +27,8 @@ Name  Multiple  Ordering constraints
 IHDR    No      Must be first
 PLTE    No      Before IDAT
 IDAT    Yes     Multiple IDATs must be consecutive
-IEND    No      Must :q
+IEND    No      Must be last
+
 Ancillary chunks (need not appear in this order):
    
 Name  Multiple  Ordering constraints

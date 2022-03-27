@@ -7,4 +7,4 @@ main
 *.orig
 backup*
 out
-
+crc_test

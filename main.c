@@ -12,7 +12,7 @@
 
 // Converts a byte array an unsigned 32 bit int
 #define into_u32(bytes) (uint32_t)((bytes[0] << 24) + (bytes[1] << 16) \
-            + (bytes[2] << 8) + bytes[3])
+        + (bytes[2] << 8) + bytes[3])
 
 #define PNG_SIGNATURE_LENGTH 8
 #define BYTE_BOUNDARY 4
@@ -74,22 +74,58 @@ typedef struct Chunk {
 
     // the redundancy check
     uint8_t crc[BYTE_BOUNDARY];
-}Chunk;
+} Chunk;
 
-// TODO: handle multiple chunk constraint
-//#define CONSTRAINT_NO_MULT_LENGTH = 2
-//const uint32_t CONSTRAINT_NO_MULT[CONSTRAINT_NO_MULT_LENGTH] = {
-//    CHUNK_IHDR,
-//    CHUNK_IEND,
-//}
+#define CRC_MAX_SIZE 256
+// CRC Handling Code  https://www.w3.org/TR/PNG/#D-CRCAppendix
+// Table of CRCs of all 8-bit messages.
+static uint32_t crc_table[CRC_MAX_SIZE];
 
-// check if a type is in a specific constraint
-//bool type_in_constraint(uint32_t *constraint, size_t constraint_size, uint32_t type) {
-//    for(int i = 0; i < constraint_size; ++i) {
-//        if(contraint[i]==type) return true;
-//    }
-//    return false;
-//}
+// Flag: has the table been computed? Initially false.
+int crc_table_computed = 0;
+
+// Make the table for a fast CRC.
+void make_crc_table(void) {
+    uint32_t c;
+    int n, k;
+
+    for (n = 0; n < 256; n++) {
+        c = (uint32_t) n;
+        for (k = 0; k < 8; k++) {
+            if (c & 1) {
+                c = 0xedb88320L ^ (c >> 1);
+            } else {
+                c = c >> 1;
+            }
+        }
+        crc_table[n] = c;
+    }
+    crc_table_computed = 1;
+}
+
+
+// Update a running CRC with the bytes buf[0..len-1]--the CRC
+// should be initialized to all 1's, and the transmitted value
+// is the 1's complement of the final running CRC (see the
+// crc() routine below).
+uint32_t update_crc(uint32_t crc, unsigned char *buf, int len) {
+    uint32_t c = crc;
+    int n;
+
+    if (!crc_table_computed) {
+        make_crc_table();
+    }
+    for (n = 0; n < len; n++) {
+        c = crc_table[(c ^ buf[n]) & 0xff] ^ (c >> 8);
+    }
+    return c;
+}
+
+// Return the CRC of the bytes buf[0..len-1].
+uint32_t crc(unsigned char *buf, int len) {
+    return update_crc(0xffffffffL, buf, len) ^ 0xffffffffL;
+}
+//----------------------------------------------------------------------------------------
 
 // puts N bytes from file by offset into bytes and returns the next offset
 // if it was successfull next offset is n + offset given in
@@ -123,8 +159,7 @@ bool check_png_signature(FILE *file, const char *png_file_path ) {
         uint8_t current_signature = PNG_SIGNATURE[signature_length];
         printf("Parsing Signature: path=%s, signature_length=%u, buffer=%u, png_buffer=%u\n",
                 png_file_path, signature_length, (uint8_t)buffer, current_signature);
-        //assert((uint8_t)buffer!=current_signature
-        //         && "PNG Signature not valid on byte: %u", (uint8_t)buffer);
+        assert((uint8_t)buffer==current_signature && "PNG Signature not valid");
         signature_length++;
     }
     return true;
@@ -132,6 +167,14 @@ bool check_png_signature(FILE *file, const char *png_file_path ) {
 
 // read all chunks
 void read_chunks(PngFile *file, Chunk *chunks, size_t chunk_size) {
+    // Create the table of crcs
+    // make_crc_table();
+
+    //for(int i = 0; i < CRC_MAX_SIZE; ++i) {
+    //    printf("CRC = 0x%X \n ", crc_table[i]);
+    //}
+
+    // #if 0
     off_t offset = PNG_SIGNATURE_LENGTH;
     while(fgetc(file->file) != EOF || file->chunk_count > chunk_size) {
         Chunk chunk = {0};
@@ -156,10 +199,25 @@ void read_chunks(PngFile *file, Chunk *chunks, size_t chunk_size) {
         // Parse the CRC
         puts("CRC START");
         offset = read_n_bytes(file->file, chunk.crc, BYTE_BOUNDARY, offset);
+        chunks[file->chunk_count++] = chunk;
         assert(file->chunk_count < chunk_size
                 && "More Chunks possible, but not enough memory provided to save them");
-        chunks[file->chunk_count++] = chunk;
-        puts("CRC END");
+
+        // TODO: Check if type + data is the parsed CRC if not then assert false and exit
+        // TODO: i dont like this memcpy really the only choice here, loops are equally as
+        // bad ;( ?
+        // FIXME: CRC parsing seems to be working BUT:
+        //  it seems like the reader is reading not enough data
+        //  and thats why some crcs, for IDAT/ICCP etc. chunks, with more data
+        //  dont work. 
+        #if 0
+        uint8_t crc_payload[BYTE_BOUNDARY + PNG_DATA_CHUNK_SIZE] = {0};
+        memcpy(crc_payload, chunk.type, BYTE_BOUNDARY);
+        memcpy(crc_payload+BYTE_BOUNDARY, chunk.data, length_into);
+        assert(into_u32(chunk.crc)==crc(crc_payload, BYTE_BOUNDARY + length_into)
+                && "Redundancy Check Code (CRC) Failure");
+        #endif
+        puts("CRC END= valid=true");
 
         // check if the first chunk is the IHDR chunk
         // if not exit fatally
@@ -178,6 +236,7 @@ void read_chunks(PngFile *file, Chunk *chunks, size_t chunk_size) {
             break;
         }
     }
+    // #endif
 }
 
 void usage(FILE *file, const char* program_name) {
@@ -220,6 +279,10 @@ int main(int argc, char **argv) {
 
             Chunk chunks[128] = {0};
             read_chunks(&png_file, chunks, 128);
+
+            //for(int i = 0; i < 128; ++i) {
+            //    printf("CHUNK: 0x%X\n", chunks[i].type_int);
+            //}
         } else {
             // return to the user and exit
             puts("PNG doesn't have a valid signature");
