@@ -11,7 +11,7 @@ DONE - Parsing all chunks
 - Check CRC for each chunk while parsing
 - Parse CRC before parsing the data
 
-- Verify Critical chunks by constraints
+- Verify Critical chunks by constraints (better constraint handling)
 
 - Parsing ancillary chunks
     - Parsing transparency/color information
