@@ -200,16 +200,14 @@ void read_chunks(PngFile *file, Chunk *chunks, size_t chunk_size) {
         assert(file->chunk_count < chunk_size
                 && "More Chunks possible, but not enough memory provided to save them");
 
-        // TODO: Check if type + data is the parsed CRC if not then assert false and exit
-        // TODO: i dont like this memcpy really the only choice here, loops are equally as
-        // bad ;( ?
-        //#if 0
+        // FIXME: memcpy for the 2 meg file does not work LUL..
+        // need a better way to concat the type and the data
+        // to give into the crc checker
         uint8_t crc_payload[BYTE_BOUNDARY + PNG_DATA_CHUNK_SIZE] = {0};
         memcpy(crc_payload, chunk.type, BYTE_BOUNDARY);
         memcpy(crc_payload+BYTE_BOUNDARY, chunk.data, length_into);
         assert(into_u32(chunk.crc)==crc(crc_payload, BYTE_BOUNDARY + length_into)
                 && "Redundancy Check Code (CRC) Failure");
-        //#endif
         puts("CRC END= valid=true");
 
         // check if the first chunk is the IHDR chunk
@@ -271,6 +269,7 @@ int main(int argc, char **argv) {
 
             Chunk chunks[128] = {0};
             read_chunks(&png_file, chunks, 128);
+            for(uint8_t i = 0; i < 128; i++) free(chunks[i].data);
         } else {
             // return to the user and exit
             puts("PNG doesn't have a valid signature");
