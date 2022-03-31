@@ -10,42 +10,14 @@
 #include <unistd.h>
 #include <string.h>
 
+#define TODO(message) assert(0 && message)
+
 // Converts a byte array an unsigned 32 bit int
 #define into_u32(bytes) (uint32_t)((bytes[0] << 24) + (bytes[1] << 16) \
         + (bytes[2] << 8) + bytes[3])
 
 #define PNG_SIGNATURE_LENGTH 8
 #define BYTE_BOUNDARY 4
-#define PNG_LENGTH_MAX 32
-#define PNG_DATA_CHUNK_SIZE PNG_LENGTH_MAX * 1024
-
-// A pre-defined byte-array that defines the signature
-const uint8_t PNG_SIGNATURE[PNG_SIGNATURE_LENGTH] = {
-    137, 80, 78, 71, 13, 10, 26, 10
-};
-
-
-// Criticial Chunks
-
-// IHDR (Image Header)
-const uint32_t CHUNK_IHDR = 0x49484452;
-
-// PLTE (Color Palette)
-const uint32_t CHUNK_PLTE = 0x00000000; /* TODO: find png with a palette */;
-
-// IDAT (Image Data)
-const uint32_t CHUNK_IDAT = 0x49444154;
-
-// IEND (Image Trailer)
-const uint32_t CHUNK_IEND = 0x49454E44;
-
-// Ancillary chunks
-const uint32_t CHUNK_cHRM = 0x6348524D; // TODO: support type
-const uint32_t CHUNK_bKGD = 0x624B4744; // TODO: support type
-const uint32_t CHUNK_pHYs = 0x70485973; // TODO: support type
-const uint32_t CHUNK_sBIT = 0x73424954; // TODO: support type
-const uint32_t CHUNK_tEXt = 0x74455874; // TODO: support type
-const uint32_t CHUNK_iCCP = 0x69434350; // TODO: support type
 
 typedef struct PngFile {
     // Count of chunks
@@ -58,12 +30,15 @@ typedef struct PngFile {
     FILE *file;
 } PngFile;
 
+// A pre-defined byte-array that defines the signature
+const uint8_t PNG_SIGNATURE[PNG_SIGNATURE_LENGTH] = {
+    137, 80, 78, 71, 13, 10, 26, 10
+};
+
 // A single chunk of any type
 typedef struct Chunk {
-    // TODO: go deeper into the individual chunk data
-    // of each chunk
-    // the data of the chunk (lazyly as a static array -)
-    uint8_t *data;//[PNG_DATA_CHUNK_SIZE];
+    // the chunk data
+    uint8_t *data;
 
     // the number of bytes for the data
     uint8_t length[BYTE_BOUNDARY];
@@ -75,6 +50,44 @@ typedef struct Chunk {
     // the redundancy check
     uint8_t crc[BYTE_BOUNDARY];
 } Chunk;
+
+// ------------- Criticial Chunks --------------------------------------------------------
+// IHDR (Image Header)
+const uint32_t CHUNK_IHDR = 0x49484452;
+typedef struct Chunk_Image_Header {
+    uint8_t width[BYTE_BOUNDARY];
+    uint8_t height[BYTE_BOUNDARY];
+    uint8_t bit_depth;
+    uint8_t colour_type;
+    uint8_t compression_method;
+    uint8_t filter_method;
+    uint8_t interlace_method;
+} Chunk_Image_Header;
+
+// parse the chunk data for the image header chunk type
+Chunk_Image_Header parse_chunk_data(Chunk *chunk) {
+    TODO("TODO: implement");
+}
+
+// PLTE (Color Palette)
+const uint32_t CHUNK_PLTE = 0x00000000; /* TODO: find png with a palette, support type */;
+
+// IDAT (Image Data)
+const uint32_t CHUNK_IDAT = 0x49444154; // TODO: support type
+
+// IEND (Image Trailer)
+const uint32_t CHUNK_IEND = 0x49454E44; // TODO: support type
+//----------------------------------------------------------------------------------------
+
+
+// -------- Ancillary chunks -------------------------------------------------------------
+const uint32_t CHUNK_cHRM = 0x6348524D; // TODO: support type
+const uint32_t CHUNK_bKGD = 0x624B4744; // TODO: support type
+const uint32_t CHUNK_pHYs = 0x70485973; // TODO: support type
+const uint32_t CHUNK_sBIT = 0x73424954; // TODO: support type
+const uint32_t CHUNK_tEXt = 0x74455874; // TODO: support type
+const uint32_t CHUNK_iCCP = 0x69434350; // TODO: support type
+// ---------------------------------------------------------------------------------------
 
 #define CRC_MAX_SIZE 256
 // CRC Handling Code  https://www.w3.org/TR/PNG/#D-CRCAppendix
@@ -203,11 +216,14 @@ void read_chunks(PngFile *file, Chunk *chunks, size_t chunk_size) {
         // FIXME: memcpy for the 2 meg file does not work LUL..
         // need a better way to concat the type and the data
         // to give into the crc checker
-        uint8_t crc_payload[BYTE_BOUNDARY + PNG_DATA_CHUNK_SIZE] = {0};
+        uint8_t *crc_payload = calloc((length_into + BYTE_BOUNDARY), sizeof(uint8_t));
         memcpy(crc_payload, chunk.type, BYTE_BOUNDARY);
-        memcpy(crc_payload+BYTE_BOUNDARY, chunk.data, length_into);
+        memcpy((crc_payload + BYTE_BOUNDARY), chunk.data, length_into);
         assert(into_u32(chunk.crc)==crc(crc_payload, BYTE_BOUNDARY + length_into)
                 && "Redundancy Check Code (CRC) Failure");
+
+        // just in case free the damn thing again 
+        free(crc_payload);
         puts("CRC END= valid=true");
 
         // check if the first chunk is the IHDR chunk
