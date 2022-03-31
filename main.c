@@ -12,6 +12,44 @@
 
 #define TODO(message) assert(0 && message)
 
+// puts N bytes from file by offset into bytes and returns the next offset
+// if it was successfull next offset is n + offset given in
+uint32_t read_n_bytes(FILE *file, uint8_t *bytes, size_t n, off_t offset) {
+    printf("Reading (%zu bytes ) from offset=%llu, target=%llu \n", n, offset, offset + n);
+
+    int fseek_ok = fseek(file, offset, SEEK_SET);
+    if(fseek_ok == -1) {
+        fprintf(stderr, "ERROR: could not fseek offset %lld", offset);
+    }
+
+    uint32_t l = 0;
+    char byte;
+    while(l < n) {
+        byte = fgetc(file);
+        printf("%u,", (uint8_t)byte);
+        bytes[l++] = (uint8_t)byte;
+    }
+    printf("\n-----\n");
+
+    // next offset
+    return offset + n;
+}
+
+// read N bytes from offset from n into m
+uint8_t read_at_offset(uint8_t *n, uint8_t n_size,
+                       uint8_t *m, uint8_t m_size, uint8_t offset) {
+    // for(uint8_t i = 0; i < 13; ++i) printf("data chnk %u \n", n[i]);
+    uint8_t c = offset;
+    uint8_t l = 0;
+    assert(m_size < n_size);
+    uint8_t o = offset + m_size;
+    while(c < o && c < n_size) {
+        // printf("l: %u, c: %u, n[c]=%u \n", l,c, n[c]);
+        m[l++] = n[++c];
+    }
+    return o;
+}
+
 // Converts a byte array an unsigned 32 bit int
 #define into_u32(bytes) (uint32_t)((bytes[0] << 24) + (bytes[1] << 16) \
         + (bytes[2] << 8) + bytes[3])
@@ -19,6 +57,8 @@
 #define PNG_SIGNATURE_LENGTH 8
 #define BYTE_BOUNDARY 4
 
+// Holds some meta information about the PNG that is
+// being decoded.
 typedef struct PngFile {
     // Count of chunks
     uint32_t chunk_count;
@@ -64,9 +104,24 @@ typedef struct Chunk_Image_Header {
     uint8_t interlace_method;
 } Chunk_Image_Header;
 
+
+// TODO: create a bigger struct that combines all the critical chumk structs
+// and is returned from the parsing process
+
 // parse the chunk data for the image header chunk type
 Chunk_Image_Header parse_chunk_data(Chunk *chunk) {
-    TODO("TODO: implement");
+    if(chunk->type_int != CHUNK_IHDR) NULL;
+
+    uint8_t offset = 0;
+    Chunk_Image_Header ihdr_data = {0};
+    offset = read_at_offset(chunk->data, 13, ihdr_data.width, BYTE_BOUNDARY, offset);
+    offset = read_at_offset(chunk->data, 13, ihdr_data.height, BYTE_BOUNDARY, offset);
+    offset = read_at_offset(chunk->data, 13, &ihdr_data.bit_depth, 1, offset);
+    offset = read_at_offset(chunk->data, 13, &ihdr_data.colour_type, 1, offset);
+    offset = read_at_offset(chunk->data, 13, &ihdr_data.compression_method, 1, offset);
+    offset = read_at_offset(chunk->data, 13, &ihdr_data.filter_method, 1, offset);
+    offset = read_at_offset(chunk->data, 13, &ihdr_data.interlace_method, 1, offset);
+    return ihdr_data;
 }
 
 // PLTE (Color Palette)
@@ -138,32 +193,10 @@ uint32_t update_crc(uint32_t crc, unsigned char *buf, int len) {
 uint32_t crc(unsigned char *buf, int len) {
     return update_crc(0xffffffffL, buf, len) ^ 0xffffffffL;
 }
-//----------------------------------------------------------------------------------------
 
-// puts N bytes from file by offset into bytes and returns the next offset
-// if it was successfull next offset is n + offset given in
-uint32_t read_n_bytes(FILE *file, uint8_t *bytes, size_t n, off_t offset) {
-    printf("Reading (%zu bytes ) from offset=%llu, target=%llu \n", n, offset, offset + n);
-
-    int fseek_ok = fseek(file, offset, SEEK_SET);
-    if(fseek_ok == -1) {
-        fprintf(stderr, "ERROR: could not fseek offset %lld", offset);
-    }
-
-    uint32_t l = 0;
-    char byte;
-    while(l < n) {
-        byte = fgetc(file);
-        printf("%u,", (uint8_t)byte);
-        bytes[l++] = (uint8_t)byte;
-    }
-    printf("\n-----\n");
-
-    // next offset
-    return offset + n;
-}
 
 // the file is a valid PNG File
+// TODO: refactor this using memcpy
 bool check_png_signature(FILE *file, const char *png_file_path ) {
     char buffer;
     uint8_t signature_length = 0;
@@ -177,7 +210,7 @@ bool check_png_signature(FILE *file, const char *png_file_path ) {
     return true;
 }
 
-// read all chunks
+// Parse all chunks from a given PngFile
 void read_chunks(PngFile *file, Chunk *chunks, size_t chunk_size) {
     // Create the table of crcs
     off_t offset = PNG_SIGNATURE_LENGTH;
@@ -206,16 +239,13 @@ void read_chunks(PngFile *file, Chunk *chunks, size_t chunk_size) {
         offset = read_n_bytes(file->file, chunk.data, length_into, offset);
         puts("Data END");
 
-        // Parse the CRC
+        // Parse and check current chunks CRC
         puts("CRC START");
         offset = read_n_bytes(file->file, chunk.crc, BYTE_BOUNDARY, offset);
         chunks[file->chunk_count++] = chunk;
         assert(file->chunk_count < chunk_size
                 && "More Chunks possible, but not enough memory provided to save them");
 
-        // FIXME: memcpy for the 2 meg file does not work LUL..
-        // need a better way to concat the type and the data
-        // to give into the crc checker
         uint8_t *crc_payload = calloc((length_into + BYTE_BOUNDARY), sizeof(uint8_t));
         memcpy(crc_payload, chunk.type, BYTE_BOUNDARY);
         memcpy((crc_payload + BYTE_BOUNDARY), chunk.data, length_into);
@@ -225,6 +255,12 @@ void read_chunks(PngFile *file, Chunk *chunks, size_t chunk_size) {
         // just in case free the damn thing again 
         free(crc_payload);
         puts("CRC END= valid=true");
+
+        Chunk_Image_Header ihdr_data = parse_chunk_data(&chunk);
+        puts("-----------IHDR_DATA--------------------------------");
+        printf("Width in Pixels: %u\n",  into_u32(ihdr_data.width));
+        printf("Height in Pixels: %u \n", into_u32(ihdr_data.height));
+        puts("----------------------------------------------------");
 
         // check if the first chunk is the IHDR chunk
         // if not exit fatally
