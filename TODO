@@ -2,14 +2,21 @@ PNG Decoder:
 ----
 
 DONE - Parsing all chunks
-- Identifing critical chunks
-    - IHDR (Image Header)
+DONE - Identifing critical chunks
+    DONE - IHDR (Image Header)
+    DONE - PLTE (Color Palette)
+    DONE - IDAT (Image Data)
+    DONE - IEND (Image Trailer)
+
+- Parsing critical chunk data
+    DONE - IHDR (Image Header)
     - PLTE (Color Palette)
     - IDAT (Image Data)
     - IEND (Image Trailer)
 
-- Check CRC for each chunk while parsing
-- Parse CRC before parsing the data
+
+DONE - Check CRC for each chunk while parsing
+- Parse CRC before parsing the data (how)
 
 - Verify Critical chunks by constraints (better constraint handling)
 
